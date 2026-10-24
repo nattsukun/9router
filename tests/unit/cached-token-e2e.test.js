@@ -19,7 +19,9 @@ beforeAll(async () => {
   await db.initDb();
 });
 
-afterAll(() => {
+afterAll(async () => {
+  const { closeDb } = await import("@/lib/db/driver.js");
+  await closeDb();
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;
@@ -80,5 +82,26 @@ describe("cached-token end-to-end (persist + aggregate + cost)", () => {
     const hist = await db.getUsageHistory({ provider: "openai" });
     expect(hist[0].tokens.prompt_tokens).toBe(1000);
     expect(hist[0].tokens.cached_tokens).toBe(600);
+  });
+  it("never exposes a raw API key in live or daily aggregate object keys", async () => {
+    const apiKey = "sk-test-do-not-expose-this-usage-secret";
+    await db.saveRequestUsage({
+      provider: "openai", model: "security-test-model", apiKey,
+      tokens: { prompt_tokens: 1, completion_tokens: 1 }, status: "ok",
+    });
+    const matchingMaskKeys = ["sk-same-111111111111-tail", "sk-same-222222222222-tail"];
+    for (const key of matchingMaskKeys) {
+      await db.saveRequestUsage({
+        provider: "openai", model: "security-test-model", apiKey: key,
+        tokens: { prompt_tokens: 1, completion_tokens: 1 }, status: "ok",
+      });
+    }
+    for (const period of ["24h", "30d"]) {
+      const stats = await db.getUsageStats(period);
+      expect(Object.keys(stats.byApiKey).length).toBeGreaterThan(0);
+      expect(JSON.stringify(stats.byApiKey)).not.toContain(apiKey);
+      for (const key of matchingMaskKeys) expect(JSON.stringify(stats.byApiKey)).not.toContain(key);
+      expect(Object.values(stats.byApiKey).filter(entry => entry.rawModel === "security-test-model")).toHaveLength(3);
+    }
   });
 });

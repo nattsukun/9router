@@ -27,12 +27,14 @@ async function setupTestContext(nodeData) {
   } = await import("@/models/index.js");
 
   const node = await createProviderNode(nodeData);
+  const { closeDb } = await import("@/lib/db/driver.js");
 
   return {
     node,
     POST,
     getProviderConnections,
-    cleanup() {
+    async cleanup() {
+      await closeDb();
       fs.rmSync(tempDir, { recursive: true, force: true });
     },
   };
@@ -73,11 +75,11 @@ describe("compatible provider connections API", () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await cleanup();
     vi.doUnmock("next/server");
     vi.resetModules();
     vi.clearAllMocks();
-    cleanup();
     cleanup = () => {};
     if (originalDataDir === undefined) delete process.env.DATA_DIR;
     else process.env.DATA_DIR = originalDataDir;

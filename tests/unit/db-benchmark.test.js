@@ -42,7 +42,9 @@ beforeAll(async () => {
   await lowDb.read();
 });
 
-afterAll(() => {
+afterAll(async () => {
+  const { closeDb } = await import("@/lib/db/driver.js");
+  await closeDb();
   if (tempSqlite) fs.rmSync(tempSqlite, { recursive: true, force: true });
   if (tempLowdb) fs.rmSync(tempLowdb, { recursive: true, force: true });
   if (originalDataDir === undefined) delete process.env.DATA_DIR;

@@ -24,6 +24,11 @@ vi.mock("fs/promises", () => ({
   constants: { R_OK: 4 },
 }));
 
+// Never invoke the real sqlite3 executable or read a local user's credentials.
+vi.mock("child_process", () => ({
+  execFile: vi.fn((_file, _args, _options, cb) => cb(new Error("CLI unavailable in test"))),
+}));
+
 // Shared mock db instance
 const mockDbInstance = {
   prepare: vi.fn(),
@@ -71,7 +76,7 @@ describe("GET /api/oauth/cursor/auto-import", () => {
     const response = await GET();
 
     expect(response.body.found).toBe(false);
-    expect(response.body.error).toContain("Cursor database not found in known macOS locations");
+    expect(response.body.error).toContain("Cursor database not found. Checked locations:");
   });
 
   it("returns descriptive error if macOS db file exists but cannot be opened", async () => {
@@ -81,8 +86,8 @@ describe("GET /api/oauth/cursor/auto-import", () => {
     const response = await GET();
 
     expect(response.body.found).toBe(false);
-    expect(response.body.error).toContain("could not open it");
-    expect(response.body.error).toContain("SQLITE_CANTOPEN");
+    expect(response.body.windowsManual).toBe(true);
+    expect(response.body.dbPath).toContain("Cursor");
   });
 
   // ── Token extraction ──────────────────────────────────────────────────
@@ -90,10 +95,7 @@ describe("GET /api/oauth/cursor/auto-import", () => {
   it("extracts tokens using exact keys", async () => {
     vi.mocked(fsPromises.access).mockResolvedValue();
     mockDbInstance.prepare.mockReturnValue({
-      all: vi.fn().mockReturnValue([
-        { key: "cursorAuth/accessToken", value: "test-token" },
-        { key: "storage.serviceMachineId", value: "test-machine-id" },
-      ]),
+      get: vi.fn((key) => ({ value: key === "cursorAuth/accessToken" ? "test-token" : "test-machine-id" })),
     });
 
     const response = await GET();
@@ -107,10 +109,7 @@ describe("GET /api/oauth/cursor/auto-import", () => {
   it("unwraps JSON-encoded string values", async () => {
     vi.mocked(fsPromises.access).mockResolvedValue();
     mockDbInstance.prepare.mockReturnValue({
-      all: vi.fn().mockReturnValue([
-        { key: "cursorAuth/accessToken", value: '"json-token"' },
-        { key: "storage.serviceMachineId", value: '"json-machine-id"' },
-      ]),
+      get: vi.fn((key) => ({ value: key === "cursorAuth/accessToken" ? '"json-token"' : '"json-machine-id"' })),
     });
 
     const response = await GET();
@@ -122,19 +121,12 @@ describe("GET /api/oauth/cursor/auto-import", () => {
 
   // ── Fuzzy fallback (macOS only) ───────────────────────────────────────
 
-  it("falls back to fuzzy key matching on macOS when exact keys are missing", async () => {
+  it("tries the supported alternate token and machine-id keys", async () => {
     vi.mocked(fsPromises.access).mockResolvedValue();
-    mockDbInstance.prepare.mockImplementation((query) => {
-      if (query.includes("IN (")) {
-        return { all: vi.fn().mockReturnValue([]) };
-      }
-      // Fuzzy LIKE query
-      return {
-        all: vi.fn().mockReturnValue([
-          { key: "cursorAuth/someOtherAccessTokenKey", value: "fallback-token" },
-          { key: "storage.someMachineId", value: "fallback-machine" },
-        ]),
-      };
+    mockDbInstance.prepare.mockReturnValue({
+      get: vi.fn((key) => ({
+        value: { "cursorAuth/token": "fallback-token", "storage.machineId": "fallback-machine" }[key],
+      })),
     });
 
     const response = await GET();
@@ -147,18 +139,18 @@ describe("GET /api/oauth/cursor/auto-import", () => {
   it("returns login-prompt error when tokens are missing even after fallback", async () => {
     vi.mocked(fsPromises.access).mockResolvedValue();
     mockDbInstance.prepare.mockReturnValue({
-      all: vi.fn().mockReturnValue([]),
+      get: vi.fn().mockReturnValue(undefined),
     });
 
     const response = await GET();
 
     expect(response.body.found).toBe(false);
-    expect(response.body.error).toContain("Please login to Cursor IDE first");
+    expect(response.body.windowsManual).toBe(true);
   });
 
   // ── Backwards-compatible: linux/win32 keep original single-path logic ─
 
-  it("linux uses single hardcoded path and original error message", async () => {
+  it("linux probes both supported config directory names", async () => {
     Object.defineProperty(process, "platform", { value: "linux", writable: true });
     vi.mocked(fsPromises.access).mockRejectedValue(new Error("ENOENT"));
     mockDbInstance.__throwOnConstruct = true;
@@ -166,11 +158,8 @@ describe("GET /api/oauth/cursor/auto-import", () => {
     const response = await GET();
 
     expect(response.body.found).toBe(false);
-    expect(response.body.error).toBe(
-      "Cursor database not found. Make sure Cursor IDE is installed and you are logged in."
-    );
-    // fs/promises.access should NOT have been called (linux skips probing)
-    expect(fsPromises.access).not.toHaveBeenCalled();
+    expect(response.body.error).toContain("Cursor database not found. Checked locations:");
+    expect(fsPromises.access).toHaveBeenCalledTimes(2);
   });
 
   it("unsupported platform returns 400", async () => {

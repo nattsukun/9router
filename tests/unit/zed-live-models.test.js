@@ -85,7 +85,9 @@ beforeAll(async () => {
   ({ createProviderConnection } = await import("@/models/index.js"));
 });
 
-afterAll(() => {
+afterAll(async () => {
+  const { closeDb } = await import("@/lib/db/driver.js");
+  await closeDb();
   fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true });
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;

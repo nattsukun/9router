@@ -76,11 +76,11 @@ const normalize = (value) => {
  * Extract tokens via better-sqlite3 (bundled dependency).
  * This is the preferred strategy — no external CLI required.
  */
-function extractTokensViaBetterSqlite(dbPath) {
-  // Dynamic require so the route stays importable even if native bindings fail
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require("better-sqlite3");
+async function extractTokensViaBetterSqlite(dbPath) {
+  // Load native bindings lazily so the CLI fallback remains available on failure.
+  const { default: Database } = await import("better-sqlite3");
   const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
 
   const query = (key) => {
     const row = db.prepare("SELECT value FROM itemTable WHERE key=? LIMIT 1").get(key);
@@ -109,8 +109,10 @@ function extractTokensViaBetterSqlite(dbPath) {
     if (raw) { machineId = normalize(raw); break; }
   }
 
-  db.close();
   return { accessToken, machineId };
+  } finally {
+    db.close();
+  }
 }
 
 /**
@@ -177,6 +179,9 @@ async function extractTokensViaCLI(dbPath) {
 export async function GET() {
   try {
     const platform = process.platform;
+    if (!["darwin", "win32", "linux"].includes(platform)) {
+      return NextResponse.json({ found: false, error: "Unsupported platform" }, { status: 400 });
+    }
     const candidates = getCandidatePaths(platform);
 
     let dbPath = null;
@@ -220,7 +225,7 @@ export async function GET() {
 
     // Strategy 1: better-sqlite3 (bundled — no external tools required)
     try {
-      const tokens = extractTokensViaBetterSqlite(dbPath);
+      const tokens = await extractTokensViaBetterSqlite(dbPath);
       if (tokens.accessToken && tokens.machineId) {
         return NextResponse.json({
           found: true,

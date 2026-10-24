@@ -30,6 +30,8 @@ RUN --mount=type=cache,target=/root/.npm \
       --fetch-timeout=300000
 
 COPY . ./
+RUN npm install --prefix /mitm-runtime --omit=dev --ignore-scripts \
+    --registry="${NPM_REGISTRY}" @peculiar/x509@2.2.0 reflect-metadata@0.2.2
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
@@ -59,7 +61,7 @@ COPY --from=builder /app/open-sse ./open-sse
 # Next file tracing can omit sibling files; MITM runs server.js as a separate process.
 COPY --from=builder /app/src/mitm ./src/mitm
 # Standalone node_modules may omit deps only required by the MITM child process.
-COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
+COPY --from=builder /mitm-runtime/node_modules ./node_modules
 # Ensure `next` is available at runtime in case tracing did not include it.
 COPY --from=builder /app/node_modules/next ./node_modules/next
 # sql.js loads dist/sql-wasm.wasm by path at runtime; tracing only follows JS imports,

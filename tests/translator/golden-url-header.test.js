@@ -4,6 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { PROVIDERS } from "../../open-sse/config/providers.js";
 import { DefaultExecutor } from "../../open-sse/executors/default.js";
+import pkg from "../../package.json";
 
 // Credentials mẫu cố định (deterministic) — KHÔNG dùng Date.now/random.
 const API_KEY_CRED = { apiKey: "sk-test-APIKEY", providerSpecificData: {} };
@@ -24,7 +25,11 @@ const SPECIALIZED = new Set([
 ]);
 
 // Per-process / per-request values: kimi's random device name, minimax's session UUID.
-const VOLATILE_HEADERS = new Set(["x-msh-device-name", "x-mavis-session-id"]);
+const VOLATILE_HEADERS = new Set([
+  "x-msh-device-name", "x-mavis-session-id", "x-platform", "x-platform-version",
+  "x-msh-device-model", "x-mavis-timezone-offset",
+  "x-client-version", "x-core-version", "x-msh-version",
+]);
 
 // Sanitize header: khử token + field thời gian động (kimi X-Msh-Device-Id) để snapshot ổn định.
 function sanitize(headers) {
@@ -32,7 +37,8 @@ function sanitize(headers) {
   for (const [k, v] of Object.entries(headers)) {
     if (VOLATILE_HEADERS.has(k.toLowerCase())) { out[k] = "<VOLATILE>"; continue; }
     out[k] = typeof v === "string"
-      ? v.replace(/Bearer .+/, "Bearer <TOK>")
+      ? v.replace(/9Router\/\d+\.\d+\.\d+/, "9Router/<VERSION>")
+          .replace(/Bearer .+/, "Bearer <TOK>")
           .replace(/sk-test-APIKEY|tok-test-ACCESS/g, "<CRED>")
           .replace(/kimi-\d{10,}/g, "kimi-<TS>")
       : v;
@@ -58,6 +64,13 @@ describe("GOLDEN buildUrl (default executor providers)", () => {
 });
 
 describe("GOLDEN buildHeaders (default executor providers)", () => {
+  it("Cline identifies the actual runtime and package version", () => {
+    const headers = new DefaultExecutor("cline").buildHeaders(API_KEY_CRED, false);
+    expect(headers["X-PLATFORM"]).toBe(process.platform);
+    expect(headers["X-PLATFORM-VERSION"]).toBe(process.version);
+    expect(headers["X-CLIENT-VERSION"]).toBe(pkg.version);
+    expect(headers["User-Agent"]).toBe(`9Router/${pkg.version}`);
+  });
   for (const pid of providerIds) {
     it(`${pid} → headers (apiKey / oauth)`, () => {
       const ex = new DefaultExecutor(pid);

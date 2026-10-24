@@ -114,3 +114,12 @@ export function getAdapterSync() {
   if (!state.instance) throw new Error("[DB] adapter not initialized — await getAdapter() first");
   return state.instance;
 }
+
+/** Release the connection before removing an isolated database or shutting down. */
+export async function closeDb() {
+  const adapter = state.instance || (state.initPromise ? await state.initPromise : null);
+  if (adapter) adapter.close();
+  state.instance = null;
+  state.initPromise = null;
+  state.logged = false;
+}

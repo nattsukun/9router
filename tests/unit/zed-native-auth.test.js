@@ -36,7 +36,9 @@ beforeAll(async () => {
   ({ generateAuthData, exchangeTokens } = await import("@/lib/oauth/providers/index.js"));
 }, 30_000);
 
-afterAll(() => {
+afterAll(async () => {
+  const { closeDb } = await import("@/lib/db/driver.js");
+  await closeDb();
   fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true });
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;

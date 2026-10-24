@@ -35,13 +35,14 @@ const handlers = {
 
 // ── SSL / SNI ─────────────────────────────────────────────────
 
+async function startServer() {
 const certCache = new Map();
 let rootCAPem;
 
-function sniCallback(servername, cb) {
+async function sniCallback(servername, cb) {
   try {
     if (certCache.has(servername)) return cb(null, certCache.get(servername));
-    const certData = getCertForDomain(servername);
+    const certData = await getCertForDomain(servername);
     if (!certData) return cb(new Error(`Failed to generate cert for ${servername}`));
     const ctx = require("tls").createSecureContext({
       key: certData.key,
@@ -59,7 +60,7 @@ let sslOptions;
 try {
   if (!fs.existsSync(path.join(MITM_DIR, "rootCA.key")) || !fs.existsSync(path.join(MITM_DIR, "rootCA.crt"))) {
     log("Root CA missing, generating...");
-    generateCert();
+    await generateCert();
   }
 
   const rootKey = fs.readFileSync(path.join(MITM_DIR, "rootCA.key"));
@@ -401,3 +402,9 @@ const shutdown = () => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 if (process.platform === "win32") process.on("SIGBREAK", shutdown);
+}
+
+startServer().catch(error => {
+  err(`MITM startup failed: ${error.message}`);
+  process.exit(1);
+});

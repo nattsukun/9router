@@ -266,9 +266,12 @@ describe("DefaultExecutor.buildHeaders() — anthropic-compatible stripping", ()
 describe("proxyAwareFetch — api.anthropic.com routing", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  it("routes api.anthropic.com to gotScraping (non-streaming) and returns ok response", async () => {
+  it("uses native fetch while browser TLS impersonation is disabled", async () => {
+    const nativeFetch = vi.fn().mockResolvedValue(Response.json({ id: "msg_test" }));
+    vi.stubGlobal("fetch", nativeFetch);
     // Mock got-scraping before module load
     vi.doMock("got-scraping", () => {
       const mockGotScraping = vi.fn().mockResolvedValue({
@@ -292,7 +295,8 @@ describe("proxyAwareFetch — api.anthropic.com routing", () => {
       body: JSON.stringify({ model: "claude-3-5-sonnet-20241022", messages: [] }),
     });
 
-    expect(gotScraping).toHaveBeenCalledOnce();
+    expect(gotScraping).not.toHaveBeenCalled();
+    expect(nativeFetch).toHaveBeenCalledOnce();
     expect(res.ok).toBe(true);
     expect(res.status).toBe(200);
     const data = await res.json();

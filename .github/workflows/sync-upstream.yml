@@ -16,11 +16,16 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      changed: ${{ steps.prepare.outputs.changed }}
+      revision: ${{ steps.prepare.outputs.revision }}
     steps:
       - name: Check out EnixmaRouter fork
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: master
 
       - name: Fetch OmniRouter upstream
         run: |
@@ -28,21 +33,43 @@ jobs:
           git fetch --prune upstream master
 
       - name: Prepare review branch
+        id: prepare
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git merge-base --is-ancestor upstream/master origin/master; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Upstream is already included in master."
+            exit 0
+          fi
           git switch -C automation/omnirouter-upstream-sync origin/master
           git merge --no-edit upstream/master
           git push --force-with-lease origin automation/omnirouter-upstream-sync
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Open or update sync pull request
+        if: steps.prepare.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          if ! gh pr view automation/omnirouter-upstream-sync --json number >/dev/null 2>&1; then
+          pr=$(gh pr list --state open --head automation/omnirouter-upstream-sync --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
             gh pr create \
               --base master \
               --head automation/omnirouter-upstream-sync \
               --title "chore: sync latest OmniRouter upstream" \
               --body "Automated upstream sync. Review build, tests, dependency audit, provider compatibility, and EnixmaRouter overlays before merge."
           fi
+
+  # GITHUB_TOKEN-created PRs do not trigger pull_request workflows. Validate
+  # their exact revision explicitly, with read-only permissions.
+  validate:
+    needs: sync
+    if: needs.sync.outputs.changed == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/validate.yml
+    with:
+      ref: ${{ needs.sync.outputs.revision }}
