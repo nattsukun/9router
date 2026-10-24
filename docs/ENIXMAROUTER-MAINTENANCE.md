@@ -1,18 +1,29 @@
 # EnixmaRouter upstream maintenance
 
 The fork tracks https://github.com/decolua/9router, branch master.
-The daily sync runs at 02:17 UTC (09:17 Asia/Bangkok) and can also be
-dispatched manually in GitHub Actions.
+Codex heartbeat automation `enixmarouter-upstream-sync` runs daily at
+09:17 Asia/Bangkok. It fetches upstream in an isolated worktree, validates
+tests, build and all three npm audits, then merges only passing changes.
+Railway deploys updates to master. This schedule depends on the Codex
+automation runtime; it is not a Railway cron or a GitHub Actions schedule.
+The old GitHub sync workflow is disabled. Dependabot remains separate.
 
-The sync merges upstream into automation/omnirouter-upstream-sync and opens
-one pull request against this fork's master. It skips when master already
-contains upstream. Merge conflicts fail the run for manual resolution.
-It does not automatically merge or deploy.
+## Railway target
 
-Validate EnixmaRouter runs the offline regression suite, production build,
-and npm audits for the application, CLI and tests. The sync calls validation
-explicitly because pull requests created with GITHUB_TOKEN do not trigger
-pull_request workflows. Dependabot proposes dependency updates separately.
+- Project: bountiful-dream (`e012895b-ad7f-4be6-a6a8-7e0feb2019bc`)
+- Environment: production (`f8773ba8-cc46-45ef-8e68-52b67075876f`)
+- Service: EnixmaRouter (`f347edd2-667b-481b-9609-1c0736afe063`)
+- Source: nattsukun/9router, master, root Dockerfile
+- Port: 20128; health: /api/health; persistent volume: /app/data
+- Public URL: https://enixmarouter-production.up.railway.app
+
+Use Railway variables for INITIAL_PASSWORD, JWT_SECRET and the randomly
+generated ENIXERA_ROUTER_ADMIN_KEY. Never commit or print these values.
+The service credential grants provider/combo administration and key listing,
+not inference, host tools or settings. Customer key provisioning and usage
+budgets explicitly return 503 until Enixera package enforcement is implemented.
+Do not advertise package purchases as ready. A fresh service also needs
+provider configuration before any live inference can succeed.
 
 ## Local validation
 
@@ -40,10 +51,10 @@ valid installed root certificates are preserved. CA creation and SNI leaf
 generation are asynchronous and callers wait before using their results.
 Docker explicitly installs the certificate dependencies for the MITM child.
 
-## GitHub Actions prerequisite
+## Historical GitHub Actions limitation
 
 At validation on 2026-10-24, GitHub refused to start run 40082081705:
 "The job was not started because your account is locked due to a billing issue."
-The account owner must resolve that billing lock before GitHub-hosted
-validation or scheduled sync can execute. The workflow files alone do not
-prove a successful scheduled run.
+This no longer blocks the Codex sync schedule or Railway deployment.
+The retained GitHub validation workflow is optional and cannot be used as
+evidence of passing checks while the account is locked.
