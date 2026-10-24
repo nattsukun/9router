@@ -1,0 +1,48 @@
+name: Sync upstream OmniRouter
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out EnixmaRouter fork
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch OmniRouter upstream
+        run: |
+          git remote add upstream https://github.com/decolua/9router.git
+          git fetch --prune upstream master
+
+      - name: Prepare review branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C automation/omnirouter-upstream-sync origin/master
+          git merge --no-edit upstream/master
+          git push --force-with-lease origin automation/omnirouter-upstream-sync
+
+      - name: Open or update sync pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh pr view automation/omnirouter-upstream-sync --json number >/dev/null 2>&1; then
+            gh pr create \
+              --base master \
+              --head automation/omnirouter-upstream-sync \
+              --title "chore: sync latest OmniRouter upstream" \
+              --body "Automated upstream sync. Review build, tests, dependency audit, provider compatibility, and EnixmaRouter overlays before merge."
+          fi
