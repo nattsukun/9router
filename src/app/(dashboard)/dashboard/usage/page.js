@@ -1,38 +1,76 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import { UsageStats, RequestLogger, CardSkeleton, SegmentedControl } from "@/shared/components";
-import ProviderLimits from "./components/ProviderLimits";
+import { Suspense, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { RequestLogger, CardSkeleton, SegmentedControl } from "@/shared/components";
+import UsageStats from "@/shared/components/UsageStats";
 import RequestDetailsTab from "./components/RequestDetailsTab";
 
+const PERIODS = [
+  { value: "today", label: "Today" },
+  { value: "24h", label: "24h" },
+  { value: "7d", label: "7D" },
+  { value: "30d", label: "30D" },
+  { value: "60d", label: "60D" },
+  { value: "all", label: "All" },
+];
+
 export default function UsagePage() {
-  const [activeTab, setActiveTab] = useState("overview");
+  return (
+    <Suspense fallback={<CardSkeleton />}>
+      <UsageContent />
+    </Suspense>
+  );
+}
+
+function UsageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const [period, setPeriod] = useState("today");
+
+  const tabFromUrl = searchParams.get("tab");
+  const activeTab = tabFromUrl && ["overview", "logs", "details"].includes(tabFromUrl)
+    ? tabFromUrl
+    : "overview";
+
+  const handleTabChange = (value) => {
+    if (value === activeTab) return;
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", value);
+    router.push(`/dashboard/usage?${params.toString()}`, { scroll: false });
+  };
 
   return (
-    <div className="flex flex-col gap-6">
-      <SegmentedControl
-        options={[
-          { value: "overview", label: "Overview" },
-          { value: "logs", label: "Logger" },
-          { value: "limits", label: "Limits" },
-          { value: "details", label: "Details" },
-        ]}
-        value={activeTab}
-        onChange={setActiveTab}
-      />
+    <div className="flex min-w-0 flex-col gap-6 px-1 sm:px-0">
+      {/* Tabs + period selector on same row */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <SegmentedControl
+          options={[
+            { value: "overview", label: "Overview" },
+            { value: "details", label: "Details" },
+          ]}
+          value={activeTab}
+          onChange={handleTabChange}
+          className="w-full sm:w-auto"
+        />
+        {activeTab === "overview" && (
+          <SegmentedControl
+            options={PERIODS}
+            value={period}
+            onChange={setPeriod}
+            size="sm"
+            className="w-full sm:w-auto"
+          />
+        )}
+      </div>
 
-      {/* Content */}
       {activeTab === "overview" && (
         <Suspense fallback={<CardSkeleton />}>
-          <UsageStats />
+          <UsageStats period={period} setPeriod={setPeriod} hidePeriodSelector />
         </Suspense>
       )}
       {activeTab === "logs" && <RequestLogger />}
-      {activeTab === "limits" && (
-        <Suspense fallback={<CardSkeleton />}>
-          <ProviderLimits />
-        </Suspense>
-      )}
       {activeTab === "details" && <RequestDetailsTab />}
     </div>
   );

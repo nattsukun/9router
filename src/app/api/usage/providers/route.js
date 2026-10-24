@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRequestDetailsDb } from "@/lib/requestDetailsDb";
+import { getDistinctProviders } from "@/lib/requestDetailsDb";
 import { getProviderNodes } from "@/lib/localDb";
 import { AI_PROVIDERS, getProviderByAlias } from "@/shared/constants/providers";
 
@@ -9,46 +9,25 @@ import { AI_PROVIDERS, getProviderByAlias } from "@/shared/constants/providers";
  */
 export async function GET() {
   try {
-    const db = await getRequestDetailsDb();
+    // Query DISTINCT provider column directly — avoids parsing every row's
+    // full JSON blob (can be hundreds of MB), which previously caused OOM.
+    const providerIds = await getDistinctProviders();
 
-    const stmt = db.prepare(`
-      SELECT DISTINCT provider
-      FROM request_details
-      WHERE provider IS NOT NULL AND provider != ''
-      ORDER BY provider ASC
-    `);
-
-    const rows = stmt.all();
-
-    // Fetch all provider nodes to get names for custom providers
     const providerNodes = await getProviderNodes();
     const nodeMap = {};
     for (const node of providerNodes) {
       nodeMap[node.id] = node.name;
     }
 
-    const providers = rows.map(row => {
-      const providerId = row.provider;
-
-      // Try to find name from various sources
+    const providers = providerIds.map(providerId => {
       let name = providerId;
-
-      // 1. Check if it's a custom provider node
       if (nodeMap[providerId]) {
         name = nodeMap[providerId];
-      }
-      // 2. Check predefined providers
-      else {
+      } else {
         const providerConfig = getProviderByAlias(providerId) || AI_PROVIDERS[providerId];
-        if (providerConfig?.name) {
-          name = providerConfig.name;
-        }
+        if (providerConfig?.name) name = providerConfig.name;
       }
-
-      return {
-        id: providerId,
-        name
-      };
+      return { id: providerId, name };
     });
 
     return NextResponse.json({ providers });

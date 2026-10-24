@@ -1,160 +1,14 @@
-// Provider models - Single source of truth
-// Key = alias (cc, cx, gc, qw, if, ag, gh for OAuth; id for API Key)
-// Field "provider" for special cases (e.g. AntiGravity models that call different backends)
+import REGISTRY from "../providers/registry/index.js";
+// PROVIDER_MODELS now built from providers/registry (transport + models co-located)
+import { PROVIDER_MODELS } from "../providers/index.js";
+import { modelQuotaFamily, modelStrip, modelTargetFormat, modelSupportedFormats, normalizeModelId } from "../providers/models/schema.js";
+import { CODEX_REVIEW_SUFFIX, isMuseSparkModel, opencodeFamilyFormats } from "../providers/models/helpers.js";
+import { FORMATS } from "../translator/formats.js";
+export { PROVIDER_MODELS };
 
-export const PROVIDER_MODELS = {
-  // OAuth Providers (using alias)
-  cc: [  // Claude Code
-    { id: "claude-opus-4-6", name: "Claude Opus 4.6" },
-    { id: "claude-opus-4-5-20251101", name: "Claude 4.5 Opus" },
-    { id: "claude-sonnet-4-5-20250929", name: "Claude 4.5 Sonnet" },
-    { id: "claude-haiku-4-5-20251001", name: "Claude 4.5 Haiku" },
-  ],
-  cx: [  // OpenAI Codex
-    // GPT 5.3 Codex - all thinking levels
-    { id: "gpt-5.3-codex", name: "GPT 5.3 Codex" },
-    { id: "gpt-5.3-codex-xhigh", name: "GPT 5.3 Codex (xHigh)" },
-    { id: "gpt-5.3-codex-high", name: "GPT 5.3 Codex (High)" },
-    { id: "gpt-5.3-codex-low", name: "GPT 5.3 Codex (Low)" },
-    { id: "gpt-5.3-codex-none", name: "GPT 5.3 Codex (None)" },
-    // Mini - medium and high only
-    { id: "gpt-5.1-codex-mini", name: "GPT 5.1 Codex Mini" },
-    { id: "gpt-5.1-codex-mini-high", name: "GPT 5.1 Codex Mini (High)" },
-    // Other models
-    { id: "gpt-5.2-codex", name: "GPT 5.2 Codex" },
-    { id: "gpt-5.2", name: "GPT 5.2" },
-    { id: "gpt-5.1-codex-max", name: "GPT 5.1 Codex Max" },
-    { id: "gpt-5.1-codex", name: "GPT 5.1 Codex" },
-    { id: "gpt-5.1", name: "GPT 5.1" },
-    { id: "gpt-5-codex", name: "GPT 5 Codex" },
-    { id: "gpt-5-codex-mini", name: "GPT 5 Codex Mini" },
-  ],
-  gc: [  // Gemini CLI
-    { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview" },
-    { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
-    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
-    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
-    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
-  ],
-  qw: [  // Qwen Code
-    // { id: "qwen3-coder-next", name: "Qwen3 Coder Next" },
-    { id: "qwen3-coder-plus", name: "Qwen3 Coder Plus" },
-    { id: "qwen3-coder-flash", name: "Qwen3 Coder Flash" },
-    { id: "vision-model", name: "Qwen3 Vision Model" },
-  ],
-  if: [  // iFlow AI
-    { id: "qwen3-coder-plus", name: "Qwen3 Coder Plus" },
-    { id: "kimi-k2", name: "Kimi K2" },
-    { id: "kimi-k2-thinking", name: "Kimi K2 Thinking" },
-    { id: "kimi-k2.5", name: "Kimi K2.5" },
-    { id: "deepseek-r1", name: "DeepSeek R1" },
-    { id: "deepseek-v3.2-chat", name: "DeepSeek V3.2 Chat" },
-    // { id: "deepseek-v3.2-reasoner", name: "DeepSeek V3.2 Reasoner" },
-    { id: "minimax-m2.1", name: "MiniMax M2.1" },
-    { id: "glm-4.7", name: "GLM 4.7" },
-    { id: "glm-4.6", name: "GLM 4.6" },
-    { id: "glm-5", name: "GLM 5" },
-  ],
-  ag: [  // Antigravity - special case: models call different backends
-    { id: "claude-opus-4-6-thinking", name: "Claude Opus 4.6 Thinking" },
-    { id: "claude-opus-4-5-thinking", name: "Claude Opus 4.5 Thinking" },
-    { id: "claude-sonnet-4-5-thinking", name: "Claude Sonnet 4.5 Thinking" },
-    { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
-    { id: "gemini-3-pro-high", name: "Gemini 3 Pro High" },
-    { id: "gemini-3-pro-low", name: "Gemini 3 Pro Low" },
-    { id: "gemini-3-flash", name: "Gemini 3 Flash" },
-    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
-  ],
-  gh: [  // GitHub Copilot - OpenAI models
-    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
-    { id: "gpt-4", name: "GPT-4" },
-    { id: "gpt-4o", name: "GPT-4o" },
-    { id: "gpt-4o-mini", name: "GPT-4o mini" },
-    { id: "gpt-4.1", name: "GPT-4.1" },
-    { id: "gpt-5", name: "GPT-5" },
-    { id: "gpt-5-mini", name: "GPT-5 Mini" },
-    { id: "gpt-5-codex", name: "GPT-5 Codex" },
-    { id: "gpt-5.1", name: "GPT-5.1" },
-    { id: "gpt-5.1-codex", name: "GPT-5.1 Codex" },
-    { id: "gpt-5.1-codex-mini", name: "GPT-5.1 Codex Mini" },
-    { id: "gpt-5.1-codex-max", name: "GPT-5.1 Codex Max" },
-    { id: "gpt-5.2", name: "GPT-5.2" },
-    { id: "gpt-5.2-codex", name: "GPT-5.2 Codex" },
-    // GitHub Copilot - Anthropic models
-    { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
-    { id: "claude-opus-4.1", name: "Claude Opus 4.1" },
-    { id: "claude-opus-4.5", name: "Claude Opus 4.5" },
-    { id: "claude-sonnet-4", name: "Claude Sonnet 4" },
-    { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
-    { id: "claude-opus-4.6", name: "Claude Opus 4.6" },
-    // GitHub Copilot - Google models
-    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
-    { id: "gemini-3-flash-preview", name: "Gemini 3 Flash" },
-    { id: "gemini-3-pro-preview", name: "Gemini 3 Pro" },
-    // GitHub Copilot - Other models
-    { id: "grok-code-fast-1", name: "Grok Code Fast 1" },
-    { id: "oswe-vscode-prime", name: "Raptor Mini" },
-  ],
-  kr: [  // Kiro AI
-    // { id: "claude-opus-4.5", name: "Claude Opus 4.5" },
-    { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
-    { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
-  ],
-  cu: [  // Cursor IDE
-    { id: "default", name: "Auto (Server Picks)" },
-    { id: "claude-4.5-opus-high-thinking", name: "Claude 4.5 Opus High Thinking" },
-    { id: "claude-4.5-opus-high", name: "Claude 4.5 Opus High" },
-    { id: "claude-4.5-sonnet-thinking", name: "Claude 4.5 Sonnet Thinking" },
-    { id: "claude-4.5-sonnet", name: "Claude 4.5 Sonnet" },
-    { id: "claude-4.5-haiku", name: "Claude 4.5 Haiku" },
-    { id: "claude-4.5-opus", name: "Claude 4.5 Opus" },
-    { id: "gpt-5.2-codex", name: "GPT 5.2 Codex" },
-  ],
+// OpenCode providers sharing the endpoint-family fallback for unknown model ids
+const isOpenCodeAlias = (aliasOrId) => !aliasOrId || ["oc", "opencode", "ocg", "opencode-go", "ocz", "opencode-zen"].includes(aliasOrId);
 
-  // API Key Providers (alias = id)
-  openai: [
-    { id: "gpt-4o", name: "GPT-4o" },
-    { id: "gpt-4o-mini", name: "GPT-4o Mini" },
-    { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
-    { id: "o1", name: "O1" },
-    { id: "o1-mini", name: "O1 Mini" },
-  ],
-  anthropic: [
-    { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4" },
-    { id: "claude-opus-4-20250514", name: "Claude Opus 4" },
-    { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet" },
-  ],
-  gemini: [
-    { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
-    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
-    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
-    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
-  ],
-  openrouter: [
-    { id: "auto", name: "Auto (Best Available)" },
-  ],
-  glm: [
-    { id: "glm-4.7", name: "GLM 4.7" },
-    { id: "glm-4.6v", name: "GLM 4.6V (Vision)" },
-  ],
-  "glm-cn": [
-    { id: "glm-4.7", name: "GLM-4.7" },
-    { id: "glm-4.6", name: "GLM-4.6" },
-    { id: "glm-4.5", name: "GLM-4.5" },
-    { id: "glm-4.5-air", name: "GLM-4.5-Air" },
-  ],
-  kimi: [
-    { id: "kimi-k2.5", name: "Kimi K2.5" },
-    { id: "kimi-k2.5-thinking", name: "Kimi K2.5 Thinking" },
-    { id: "kimi-latest", name: "Kimi Latest" },
-  ],
-  minimax: [
-    { id: "MiniMax-M2.1", name: "MiniMax M2.1" },
-  ],
-  "minimax-cn": [
-    { id: "MiniMax-M2.1", name: "MiniMax M2.1" },
-  ],
-};
 
 // Helper functions
 export function getProviderModels(aliasOrId) {
@@ -166,51 +20,145 @@ export function getDefaultModel(aliasOrId) {
   return models?.[0]?.id || null;
 }
 
+// Providers whose registry uses dots in version numbers (e.g. "claude-sonnet-4.5").
+// For these, we tolerate clients sending dashes ("claude-sonnet-4-5") by normalizing
+// digit-hyphen-digit to digit-dot-digit before lookup. Other providers are left untouched.
+const DOT_VERSION_PROVIDERS = new Set(["kr", "kiro"]);
+
+// Find a registry entry by id. For Kiro models, tolerates dash/dot version separators
+// ("claude-sonnet-4-5" ~= "claude-sonnet-4.5"). Other providers use exact match only.
+function findModel(models, modelId, aliasOrId) {
+  if (!models) return undefined;
+  const baseModelId = typeof modelId === "string"
+    ? modelId.replace(/\([^()]+\)\s*$/, "").trim()
+    : modelId;
+  const found = models.find(m => m.id === modelId || m.id === baseModelId);
+  if (found) return found;
+  if (!DOT_VERSION_PROVIDERS.has(aliasOrId)) return undefined;
+  const normalized = normalizeModelId(baseModelId);
+  if (normalized === baseModelId) return undefined;
+  return models.find(m => m.id === normalized);
+}
+
 export function isValidModel(aliasOrId, modelId, passthroughProviders = new Set()) {
   if (passthroughProviders.has(aliasOrId)) return true;
   const models = PROVIDER_MODELS[aliasOrId];
   if (!models) return false;
-  return models.some(m => m.id === modelId);
+  return !!findModel(models, modelId, aliasOrId);
 }
 
 export function findModelName(aliasOrId, modelId) {
   const models = PROVIDER_MODELS[aliasOrId];
   if (!models) return modelId;
-  const found = models.find(m => m.id === modelId);
+  const found = findModel(models, modelId, aliasOrId);
   return found?.name || modelId;
 }
 
 export function getModelTargetFormat(aliasOrId, modelId) {
+  if (isOpenCodeAlias(aliasOrId) && isMuseSparkModel(modelId)) {
+    return FORMATS.OPENAI_RESPONSES;
+  }
   const models = PROVIDER_MODELS[aliasOrId];
   if (!models) return null;
-  const found = models.find(m => m.id === modelId);
-  return found?.targetFormat || null;
+  const found = findModel(models, modelId, aliasOrId);
+  if (found) return modelTargetFormat(found);
+  // Family fallback keeps modelsFetcher/passthrough ids on their endpoint lane
+  if (isOpenCodeAlias(aliasOrId)) return opencodeFamilyFormats(modelId)?.targetFormat || null;
+  return null;
 }
 
-// Provider ID to alias mapping
-export const PROVIDER_ID_TO_ALIAS = {
-  claude: "cc",
-  codex: "cx",
-  "gemini-cli": "gc",
-  qwen: "qw",
-  iflow: "if",
-  antigravity: "ag",
-  github: "gh",
-  kiro: "kr",
-  cursor: "cu",
-  openai: "openai",
-  anthropic: "anthropic",
-  gemini: "gemini",
-  openrouter: "openrouter",
-  glm: "glm",
-  "glm-cn": "glm-cn",
-  kimi: "kimi",
-  minimax: "minimax",
-  "minimax-cn": "minimax-cn",
-};
+// Declared upstream formats for a model (registry `supportedFormats`). Drives the
+// per-model guard on the sourceFormat-matched transport; null when undeclared.
+// Unknown OpenCode ids fall back to the family regex (chat lane by default) so
+// auto-fetched models never wrongly use the sourceFormat-matched transport.
+export function getModelSupportedFormats(aliasOrId, modelId) {
+  const models = PROVIDER_MODELS[aliasOrId];
+  if (!models) return null;
+  const found = findModel(models, modelId, aliasOrId);
+  if (found) return modelSupportedFormats(found);
+  if (isOpenCodeAlias(aliasOrId)) return opencodeFamilyFormats(modelId)?.supportedFormats || [FORMATS.OPENAI];
+  return null;
+}
+
+export function getModelType(aliasOrId, modelId) {
+  const models = PROVIDER_MODELS[aliasOrId];
+  if (!models) return null;
+  const found = findModel(models, modelId, aliasOrId);
+  return found?.kind || found?.type || null;
+}
+
+// Raw registry entry for a model (suffix-aware) — executor lookups of per-model hints (e.g. defaultLocation).
+export function getModelMeta(aliasOrId, modelId) {
+  return findModel(PROVIDER_MODELS[aliasOrId], modelId, aliasOrId) || null;
+}
+
+export function getModelUpstreamId(aliasOrId, modelId, clientBody = null) {
+  // Split off thinking suffix "(level)" so lookup hits the base id; re-append it to
+  // the result so downstream applyThinking still sees the suffix (body.model is stripped separately).
+  const sufMatch = typeof modelId === "string" ? modelId.match(/\([^()]+\)\s*$/) : null;
+  const suffix = sufMatch ? sufMatch[0] : "";
+  const baseId = suffix ? modelId.slice(0, sufMatch.index).trim() : modelId;
+  const models = PROVIDER_MODELS[aliasOrId];
+
+  // Resolve requested thinking level from suffix or client request body
+  const rawSuffix = suffix ? suffix.slice(1, -1).trim().toLowerCase() : "";
+  let tier = rawSuffix === "xhigh" || rawSuffix === "max" ? "high" : rawSuffix === "minimal" ? "low" : rawSuffix;
+  if (!tier && clientBody && typeof clientBody === "object") {
+    const rawEffort = clientBody.reasoning_effort || clientBody.output_config?.effort || (typeof clientBody.reasoning === "object" ? clientBody.reasoning?.effort : null);
+    if (typeof rawEffort === "string" && rawEffort) {
+      const v = rawEffort.toLowerCase().trim();
+      tier = v === "xhigh" || v === "max" ? "high" : v === "minimal" ? "low" : v;
+    } else if (clientBody.thinking && typeof clientBody.thinking === "object") {
+      const b = Number(clientBody.thinking.budget_tokens);
+      if (Number.isFinite(b) && b > 0) {
+        tier = b > 16384 ? "high" : b <= 4096 ? "low" : "medium";
+      }
+    }
+  }
+
+  // Look for tiered variant first if a tier was requested (e.g. gemini-3.8-flash-high)
+  const tieredId = tier ? `${baseId}-${tier}` : null;
+  const found = (tieredId && findModel(models, tieredId, aliasOrId)) || findModel(models, baseId, aliasOrId);
+  const resolvedId = found?.upstreamModelId || found?.id;
+  if (resolvedId) {
+    const presetMatch = resolvedId.match(/\([^()]+\)\s*$/);
+    const presetSuffix = presetMatch?.[0] || "";
+    const resolvedBase = presetSuffix ? resolvedId.slice(0, presetMatch.index).trim() : resolvedId;
+    return resolvedBase + (suffix || (presetSuffix && tier ? `(${tier})` : presetSuffix));
+  }
+  if (aliasOrId === "cx" && typeof baseId === "string" && baseId.endsWith(CODEX_REVIEW_SUFFIX)) {
+    return baseId.slice(0, -CODEX_REVIEW_SUFFIX.length) + suffix;
+  }
+  return baseId + suffix;
+}
+
+export function getModelQuotaFamily(aliasOrId, modelId) {
+  const models = PROVIDER_MODELS[aliasOrId];
+  return modelQuotaFamily(findModel(models, modelId, aliasOrId));
+}
+
+// OAuth short aliases — derived from registry `alias` (single source). everything else: alias = id.
+// vertex/vertex-partner keep alias=id (kept via the `|| id` fallback in consumers).
+export const OAUTH_ALIASES = Object.fromEntries(
+  REGISTRY.filter(r => r.alias && r.alias !== r.id).map(r => [r.id, r.alias])
+);
+
+// Derived from REGISTRY — no need to maintain manually. REGISTRY (not PROVIDERS):
+// media-only entries (elevenlabs, cartesia, inworld, ...) declare no transport, so
+// keying off PROVIDERS dropped their alias and made their registry `models`
+// unreachable — the exact same map PROVIDER_MODELS is keyed by
+// (`entry.alias || entry.id` in providers/index.js).
+export const PROVIDER_ID_TO_ALIAS = Object.fromEntries(
+  REGISTRY.map(r => [r.id, r.alias || r.id])
+);
 
 export function getModelsByProviderId(providerId) {
   const alias = PROVIDER_ID_TO_ALIAS[providerId] || providerId;
   return PROVIDER_MODELS[alias] || [];
 }
 
+// Get strip list for a model entry (explicit opt-in only)
+// Returns array of content types to strip, e.g. ["image", "audio"]
+export function getModelStrip(alias, modelId) {
+  return modelStrip(findModel(PROVIDER_MODELS[alias], modelId, alias));
+}

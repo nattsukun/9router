@@ -1,5 +1,6 @@
 import { BaseExecutor } from "./base.js";
-import { PROVIDERS, OAUTH_ENDPOINTS } from "../config/constants.js";
+import { PROVIDERS } from "../config/providers.js";
+import { OAUTH_ENDPOINTS, GEMINI_CLI_API_CLIENT, geminiCLIUserAgent } from "../config/appConstants.js";
 
 export class GeminiCLIExecutor extends BaseExecutor {
   constructor() {
@@ -15,15 +16,41 @@ export class GeminiCLIExecutor extends BaseExecutor {
     return {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${credentials.accessToken}`,
-      ...(stream && { "Accept": "text/event-stream" })
+      "User-Agent": geminiCLIUserAgent(this._currentModel),
+      "X-Goog-Api-Client": GEMINI_CLI_API_CLIENT,
+      "Accept": stream ? "text/event-stream" : "application/json"
     };
   }
 
   transformRequest(model, body, stream, credentials) {
-    if (!body.project && credentials?.projectId) {
-      body.project = credentials.projectId;
-    }
-    return body;
+    // Store model for use in buildHeaders (called by base.execute after transformRequest)
+    this._currentModel = model;
+    // Cloud Code Assist wraps the Gemini payload: { project, model, request: <body> }
+    if (body && body.request && body.model) return body;
+    return {
+      project: credentials?.projectId || body?.project,
+      model,
+      request: body
+    };
+  }
+
+  // Parse RetryInfo.retryDelay from Google API 429 body to surface upstream retry hint
+  parseError(response, bodyText) {
+    const base = super.parseError(response, bodyText);
+    if (response.status !== 429 || !bodyText) return base;
+    try {
+      const parsed = JSON.parse(bodyText);
+      const details = parsed?.error?.details;
+      if (Array.isArray(details)) {
+        for (const d of details) {
+          if (d?.["@type"] === "type.googleapis.com/google.rpc.RetryInfo" && d?.retryDelay) {
+            base.retryAfter = d.retryDelay;
+            break;
+          }
+        }
+      }
+    } catch {}
+    return base;
   }
 
   async refreshCredentials(credentials, log) {
