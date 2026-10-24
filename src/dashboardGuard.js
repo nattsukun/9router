@@ -3,6 +3,7 @@ import { getSettings, validateApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { verifyDashboardAuthToken } from "@/lib/auth/dashboardSession";
 import { hasTrustedPeerHeaders } from "@/lib/auth/trustedPeer";
+import { hasServiceAdminToken, serviceAdminRoute } from "@/lib/auth/serviceAdmin";
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
 const CLI_TOKEN_SALT = "9r-cli-auth";
@@ -229,6 +230,14 @@ export async function proxy(request) {
   // Deny-by-default for /api/* — public allow-list bypasses, everything else requires auth.
   if (pathname.startsWith("/api/")) {
     if (isPublicApi(pathname)) return NextResponse.next();
+    if (hasServiceAdminToken(request)) {
+      const access = serviceAdminRoute(pathname, request.method);
+      if (access === "allow") return NextResponse.next();
+      if (access === "unsupported") return NextResponse.json(
+        { error: "Enixera package quota and budget integration is not available", code: "PACKAGE_ENFORCEMENT_UNAVAILABLE" },
+        { status: 503 },
+      );
+    }
     if (await hasValidCliToken(request) || await isAuthenticated(request))
       return NextResponse.next();
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
